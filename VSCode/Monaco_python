@@ -1,0 +1,511 @@
+import random
+import math
+import numpy as np
+
+class Company:
+    def __init__(self, name, stage, valuation, state, firm_invested_capital, firm_ownership, stages, valuations, dilution):
+        self.name = name
+        self.stage = stage
+        self.valuation = valuation
+        self.state = state
+        self.firm_invested_capital = firm_invested_capital
+        self.firm_ownership = firm_ownership
+        self.market_constraints = {
+            'stages': stages,
+            'valuations': valuations,
+            'dilution': dilution
+        }
+        self.age = 0
+    
+    def promote(self, secondary_dry_powder, pro_rata_at_or_below):
+        self.age += 1
+        ## print('Promotion triggered with secondary capital:', secondary_dry_powder)
+        self.stage = self.market_constraints['stages'][min(self.market_constraints['stages'].index(self.stage) + 1, len(self.market_constraints['stages'])-1)]
+        self.valuation = self.market_constraints['valuations'][self.stage]
+        ## print('Promoted to:', self.stage, 'with valuation:', self.valuation, 'and previous ownership of', self.firm_ownership)
+
+        dilution = self.market_constraints['dilution'][self.stage]
+        post_dilution_ownership = self.firm_ownership*(1-dilution)
+        pro_rata_investment = 0
+        if self.valuation <= pro_rata_at_or_below:
+            pro_rata_investment = min((self.firm_ownership - post_dilution_ownership)*self.valuation, secondary_dry_powder)
+        ##print('Pro rata investment:', pro_rata_investment, 'on dilution of', dilution)
+        
+        self.firm_invested_capital += pro_rata_investment
+        self.firm_ownership = (self.firm_ownership*(1-dilution)) + pro_rata_investment/self.valuation ## minus dilution + pro rata investment ownership
+        ##print('final firm ownership', self.firm_ownership)
+        
+        return pro_rata_investment
+            
+
+    def m_and_a(self):
+        self.age += 1
+        self.state = "Acquired"
+
+        m_and_a_outcome_odds = [0.01, 0.02, 0.27, 0.7]
+        m_and_a_multipliers = [10,5,1,.5]
+
+        rand = random.random()
+        if rand <m_and_a_outcome_odds[0]:
+            # print('10x')
+            self.valuation = m_and_a_multipliers[0]*self.valuation
+        elif rand < m_and_a_outcome_odds[0]+m_and_a_outcome_odds[1]:
+            # print('5x')
+            self.valuation = m_and_a_multipliers[1]*self.valuation
+        elif rand < m_and_a_outcome_odds[0]+m_and_a_outcome_odds[1]+m_and_a_outcome_odds[2]:
+            # print('1x')
+            self.valuation = m_and_a_multipliers[2]*self.valuation
+        else:
+            # print('0.5x')
+            self.valuation = m_and_a_multipliers[3]*self.valuation
+    
+    def get_firm_value(self):
+        return self.valuation * self.firm_ownership
+
+    def fail(self):
+        self.age += 1
+        self.state = 'Failed'
+        self.valuation = 0
+    
+    def age_company(self):
+        self.age += 1
+    
+    def get_numerical_stage(self):
+        return self.market_constraints['stages'].index(self.stage)
+
+    def __str__(self):
+        return '[' + self.name + ', ' + self.stage + ', ' + str(self.valuation) + ', ' + self.state + ', ' + str(self.firm_invested_capital) + ', ' + str(self.firm_ownership) + ']'
+    
+    def __repr__(self):
+        return '[' + self.name + ', ' + self.stage + ', ' + str(self.valuation) + ', ' + self.state + ', ' +  str(self.firm_ownership) + ',' + str(self.get_firm_value()) + ']\n'
+
+
+#############################################################################
+#############################################################################
+############################# FIRM CLASS ####################################
+#############################################################################
+#############################################################################
+class Firm:
+    def __init__(self, name, primary_investments, follow_on_reserve, fund_size, firm_lifespan_years):
+        self.name = name
+        self.primary_investments = primary_investments
+        self.follow_on_reserve = follow_on_reserve
+        self.primary_capital_deployed = 0
+        self.follow_on_capital_deployed = 0
+        self.fund_size = fund_size
+        self.firm_lifespan_years = firm_lifespan_years
+        self.portfolio = []
+    
+    def initialize_portfolio(self, stages, valuations, dilution):
+        for primary_capital_rounds in self.primary_investments:
+            stage_invested = primary_capital_rounds[0]
+            capital_invested = primary_capital_rounds[1]
+            capital_to_be_allocated = primary_capital_rounds[2]
+
+            while capital_to_be_allocated > 0 and capital_to_be_allocated >= capital_invested:
+                self.portfolio.append(Company('comp_name' + stage_invested[:2] + str(capital_to_be_allocated), 
+                                            stage_invested, 
+                                            valuations[stage_invested],
+                                            'Alive', 
+                                            capital_invested, 
+                                            capital_invested/valuations[stage_invested],
+                                            stages, 
+                                            valuations, 
+                                            dilution))
+                capital_to_be_allocated -= capital_invested
+                self.primary_capital_deployed += capital_invested
+        # print('----------------------------------------------------------')
+        # print('Initialized portfolio with', len(self.portfolio))
+        # print('Pre-seed', len(list(filter(lambda x: x.stage == 'Pre-seed', self.portfolio))))
+        # print('Seed', len(list(filter(lambda x: x.stage == 'Seed', self.portfolio))))
+        # print('Series A', len(list(filter(lambda x: x.stage == 'Series A', self.portfolio))))
+        # print('----------------------------------------------------------')
+    
+    def concise_portfolio_value(self):
+        total_value = 0
+        for portco in self.portfolio:
+            if portco.state == 'Alive':
+                total_value += portco.valuation * portco.firm_ownership
+            elif portco.state == 'Failed':
+                total_value += 0
+            elif portco.state == 'Acquired':
+                total_value += portco.valuation * portco.firm_ownership
+        return total_value
+
+    def detailed_portfolio_value(self):
+        total_value = {
+            'Alive': 0,
+            'Acquired': 0
+        }
+        for portco in self.portfolio:
+            # print(portco.stage, portco.state, '-- val', portco.valuation, 'return', portco.valuation*portco.firm_ownership, 'ic', portco.firm_invested_capital, 'ownership', portco.firm_ownership)
+            if portco.state == 'Alive':
+                total_value['Alive'] += portco.valuation * portco.firm_ownership
+            elif portco.state == 'Acquired':
+                total_value['Acquired'] += portco.valuation * portco.firm_ownership
+        return total_value
+
+    def get_capital_invested(self):
+        return self.primary_capital_deployed + self.follow_on_capital_deployed
+    
+    def get_remaining_follow_on_capital(self):
+        return self.follow_on_reserve - self.follow_on_capital_deployed
+    
+    def get_irr(self):
+        fv = self.concise_portfolio_value()
+        pv = self.primary_capital_deployed + self.follow_on_capital_deployed
+        # print(fv, pv)
+        IRR = ((fv / pv) ** (1/self.firm_lifespan_years)) -1
+        return IRR
+
+    def get_MoM(self):
+        MoM = round(self.concise_portfolio_value()/self.get_capital_invested(), 1)
+        return MoM
+    
+    def __repr__(self):
+        f = {
+            'Pre-seed':0,
+            'Seed':0,
+            'Series A':0,
+            'Series B':0,
+            'Series C':0,
+            'Series D':0,
+            'Series E':0,
+            'Series F':0,
+            'Failed': 0,
+            'Acquired': 0
+        }
+        # f = {
+        #     'Alive':0,
+        #     'Failed': 0,
+        #     'Acquired': 0
+        # }
+        for comp in self.portfolio:
+            if comp.state == 'Alive':
+                f[comp.stage] += 1
+                # f['Alive'] += 1
+            elif comp.state == 'Failed':
+                f['Failed'] += 1
+            elif comp.state == 'Acquired':
+                f['Acquired'] += 1 
+        return str(f)
+    
+    def check_portfolio(self):
+        ages = [company.age for company in self.portfolio]
+        ## print(ages)
+        
+
+#############################################################################
+#############################################################################
+###################           MONTECARLO CLASS        #######################
+#############################################################################
+#############################################################################
+class Montecarlo:
+    def __init__(self, num_scenarios, stages, stage_probs, stage_valuations, stage_dilution, firm_attributes):
+        self.num_scenarios = num_scenarios
+        self.firm_scenarios = []
+        self.stages = stages
+        self.stage_probs = stage_probs
+        self.stage_valuations = stage_valuations
+        self.stage_dilution = stage_dilution
+        self.firm_attributes = firm_attributes
+    
+    def initialize_scenarios(self):
+        # print(self.firm_attributes)
+        # print('Initializing Montecarlo simulation with', self.num_scenarios, 'scenarios')
+        for i in range(self.num_scenarios):
+            new_firm = Firm('Gradient'+ str(i), 
+                            self.firm_attributes['primary_investments'], 
+                            self.firm_attributes['follow_on_reserve'], 
+                            self.firm_attributes['fund_size'], 
+                            self.firm_attributes['firm_lifespan_years'])
+            new_firm.initialize_portfolio(self.stages, self.stage_valuations, self.stage_dilution)
+            self.firm_scenarios.append(new_firm)
+            ##print('Scenariosxxxx', self.firm_scenarios)
+        
+    def simulate(self):
+        ## For each scenario
+        for firm in self.firm_scenarios:
+            ## Iteratively age companies in portfolio, deploying any secondary capital available
+            for period in range(self.firm_attributes['firm_lifespan_periods']):
+                
+                for company in firm.portfolio:
+                    
+                    if company.state == 'Alive' and company.get_numerical_stage() < len(self.stages)-1:
+                        rand = random.random()
+                        # print ('Company', rand, self.stage_probs[company.stage][0])
+                        if rand < self.stage_probs[company.stage][2]:
+                            company.m_and_a()
+                        elif rand < self.stage_probs[company.stage][2] + self.stage_probs[company.stage][1]:
+                            company.fail()
+                        else: 
+                            secondary_capital_consumed = company.promote(firm.get_remaining_follow_on_capital(), self.firm_attributes['pro_rata_at_or_below'])
+                            firm.follow_on_capital_deployed += secondary_capital_consumed
+                    elif company.state == 'Failed':
+                        company.age_company()
+                    elif company.state == 'Acquired':
+                        company.age_company()
+        
+            if firm.get_remaining_follow_on_capital() > 0:
+                extra_investments = []
+                extra_investment_type = self.firm_attributes['primary_investments'][0]
+                num_extra_investments = int(firm.get_remaining_follow_on_capital() // extra_investment_type[1])
+                for extra_investment_index in range (num_extra_investments):
+                    extra_investments.append(Company('extra' + str(extra_investment_index), 
+                                            extra_investment_type[0], 
+                                            self.stage_valuations[extra_investment_type[0]],
+                                            'Alive', 
+                                            extra_investment_type[1], 
+                                            extra_investment_type[1]/self.stage_valuations[extra_investment_type[0]],
+                                            self.stages, 
+                                            self.stage_valuations, 
+                                            self.stage_dilution))
+                    firm.primary_capital_deployed += extra_investment_type[1]
+                    firm.follow_on_reserve -= extra_investment_type[1]
+
+                for period in range(self.firm_attributes['firm_lifespan_periods']):
+                    for company in extra_investments:
+                        if company.state == 'Alive' and company.get_numerical_stage() < len(self.stages)-1:
+                            rand = random.random()
+                            # print ('Company', rand, self.stage_probs[company.stage][0])
+                            if rand < self.stage_probs[company.stage][2]:
+                                company.m_and_a()
+                            elif rand < self.stage_probs[company.stage][2] + self.stage_probs[company.stage][1]:
+                                company.fail()
+                            else: 
+                                # No secondary capital available b/c this is the "extra" batch of companies
+                                company.promote(0, self.firm_attributes['pro_rata_at_or_below'])
+                        elif company.state == 'Failed':
+                            company.age_company()
+                        elif company.state == 'Acquired':
+                            company.age_company()
+                firm.portfolio += extra_investments
+
+
+                
+                
+
+
+    def get_IRR_return_outcomes(self):
+        outcomes = []
+        for firm in self.firm_scenarios:
+            outcomes.append(firm.get_irr())
+        return outcomes
+
+    def get_MoM_return_outcomes(self):
+        outcomes = []
+        # print('Scenariosppppp', self.firm_scenarios)
+        for firm in self.firm_scenarios:
+            ## print(firm.get_capital_invested())
+            outcomes.append(firm.get_MoM())
+        return outcomes
+    
+    def get_median_return_outcome(self, type):
+        outcomes = []
+        if type == 'MoM':
+            outcomes = self.get_MoM_return_outcomes()
+        elif type == 'IRR':
+            outcomes = self.get_IRR_return_outcomes()
+        if len(outcomes) % 2 == 0:
+            return (outcomes[len(outcomes)//2] + outcomes[len(outcomes)//2 - 1])/2
+        else:
+            return outcomes[len(outcomes)//2]
+            
+        
+
+    def get_exact_return_outcomes(self):
+        outcomes = []
+        for firm in self.firm_scenarios:
+            outcomes.append(firm.concise_portfolio_value())
+        return outcomes
+
+    def print_montecarlo_histogram(self):
+        ''' Print function for montecarlo simulation - very ugly code'''
+        to_return = {}
+        outcomes = self.get_MoM_return_outcomes()
+        hist_size = .25
+        counter = 0.0
+        upper_limit = 15
+        while counter < upper_limit:
+            relevant = list(filter(lambda y: counter <= y < counter+hist_size, outcomes))
+            to_return[f"{counter}-{counter+hist_size}"] = [str(len(relevant))]
+
+            # f"{counter}-{counter+hist_size}:" + str(len(relevant)) + f":{len(relevant)/self.num_scenarios:.1%}")
+
+            counter += hist_size
+        
+        to_return['25'] = [str(np.percentile(outcomes, 25))]
+        to_return['50'] = [str(np.percentile(outcomes, 50))]
+        to_return['75'] = [str(np.percentile(outcomes, 75))]
+        to_return['90'] = [str(np.percentile(outcomes, 90))]
+        to_return['95'] = [str(np.percentile(outcomes, 95))]
+
+        total_companies = 0
+        for scenario in self.firm_scenarios:
+            total_companies += len(scenario.portfolio)
+        total_companies /= self.num_scenarios
+        to_return['num_comps'] = [str(total_companies)]
+
+        a = []
+        for scenario in self.firm_scenarios:
+            b = scenario.primary_investments[0][1]/self.stage_valuations[scenario.primary_investments[0][0]]
+            a.append(b)
+        to_return['avg_ownership'] = [str(np.mean(a))]
+
+        return to_return
+
+
+
+
+    
+    def get_montecarlo_outcomes_overview(self):
+        return {
+            'Num Simulations': self.num_scenarios,
+            'Fund Size': self.firm_attributes['fund_size'],
+            'Initial Investment': self.firm_attributes['primary_investments'],
+            'Follow on': self.firm_attributes['follow_on_reserve'],
+            'Median MoM': self.get_median_return_outcome('MoM'),
+            'Median IRR': f"{self.get_median_return_outcome('IRR'):.1%}"
+        }
+
+    def print_results(self):
+        print(f"Montecarlo Simulation Results ({self.num_scenarios} scenarios):")
+        for i, scenario in enumerate(self.firm_scenarios, start=1):
+            print(f"Scenario {i}: {scenario}")
+            
+
+def run_montecarlo(firm_attributes):
+    num_scenarios = 10000
+    stages = ['Pre-seed', 'Seed', 'Series A', 'Series B', 'Series C', 'Series D', 'Series E', 'Series F']
+    
+    #Probability distribution: next round, fail, m&a,
+    stage_probs = {
+        'Pre-seed': [.61, .24, .16],
+        'Seed': [.50, .30, .20],
+        'Series A':    [.61, .3, .16],
+        'Series B':    [.52, .32, .17],
+        'Series C':    [.38, .50, .11],
+        'Series D':    [.33, .56, .11],
+        'Series E':    [.22, .57, .21],
+        'Series F':    [.10, .80, .10] #note this case is not triggered unless there is a Series G
+    }
+
+    stage_dilution = {
+        'Seed': 0.20,
+        'Series A': 0.22,
+        'Series B': 0.2,
+        'Series C': 0.15,
+        'Series D': 0.1,
+        'Series E': 0.1,
+        'Series F': 0.1
+    }
+
+    stage_valuations = {
+        'Pre-seed': 20,
+        'Seed': 30,
+        'Series A': 70,
+        'Series B': 200,
+        'Series C': 500,
+        'Series D': 750,
+        'Series E': 1500,
+        'Series F': 10000
+    }
+
+    
+    ## Perform checks that firm attributes are properly set
+    if firm_attributes['follow_on_reserve'] + sum(investment[-1] for investment in firm_attributes['primary_investments']) != firm_attributes['fund_size']:
+        print('Error: Fund size does not match capital allocation', firm_attributes)
+        return
+    if firm_attributes['firm_lifespan_periods'] != len(stages)-1 or len(stages) != len(stage_valuations.keys()) or len(stages) != len(stage_probs.keys()):
+        print('Error: Stages do not match probabilities, valuations, or firm lifespan', firm_attributes)
+        return
+    # for r in firm_attributes['primary_investments']:
+    #     if r[2] / r[1] != round(r[2] / r[1]):
+    #         print ('r2:', r[2], 'r1:', r[1], 'r2/r1:', r[2]/r[1], 'round:', round(r[2]/r[1]))
+    #         print('Error: Pimary investment capital allocated and amount of capital do not align', firm_attributes)
+    #         return
+         
+
+    ## print('\nInitializing Montecarlo simulation with structure:', firm_attributes, '\n')
+    montecarlo = Montecarlo(num_scenarios, stages, stage_probs, stage_valuations, stage_dilution, firm_attributes)
+    montecarlo.initialize_scenarios()
+    montecarlo.simulate()
+    
+    ## print(sorted(montecarlo.get_IRR_return_outcomes()))
+    ## print([f"{num*100:.1f}%" for num in sorted(montecarlo.get_IRR_return_outcomes())], '\n')
+    ## print(list(map(lambda x : round(x), sorted(montecarlo.get_exact_return_outcomes()))), '\n')
+    print('Overview of simulation outputs:', montecarlo.get_montecarlo_outcomes_overview(), '\n')
+    return montecarlo.print_montecarlo_histogram()
+
+
+
+def helper_combine(args):
+    master_arg = args[0]
+    print('args:',args)
+    for arg in args[1:]:
+        for key in arg.keys():
+            if key in master_arg:
+                master_arg[key] += arg[key]
+            else:
+                master_arg[key] = arg[key]
+    for key in master_arg.keys():
+        print(':'.join([key] + master_arg[key]))
+
+
+if __name__ == '__main__':
+    # firm_attributes1 = {
+    #     'primary_investments': [['Pre-seed', 1.5,18], ['Seed', 4, 180]], ## round, invested capital, total capital allocated to this stage
+    #     'follow_on_reserve':2, ## total dollars reserved for fdund size
+    #     'fund_size': 200,
+    #     'pro_rata_at_or_below': 30,
+    #     'firm_lifespan_periods': 7,
+    #     'firm_lifespan_years': 11
+    # }
+    # firm_attributes2 = {
+    #     'primary_investments': [['Seed', 4, 200]], ## round, invested capital, total capital allocated to this stage
+    #     'follow_on_reserve':0, ## total dollars reserved for fdund size
+    #     'fund_size': 200,
+    #     'pro_rata_at_or_below': 30,
+    #     'firm_lifespan_periods': 7,
+    #     'firm_lifespan_years': 11
+    # }
+    # firm_attributes3 = {
+    #     'primary_investments': [['Pre-seed', 1.5, 12],['Seed', 4, 136], ['Series A', 10, 50]], ## round, invested capital, total capital allocated to this stage
+    #     'follow_on_reserve':2, ## total dollars reserved for fdund size
+    #     'fund_size': 200,
+    #     'pro_rata_at_or_below': 30,
+    #     'firm_lifespan_periods': 7,
+    #     'firm_lifespan_years': 11
+    # }
+    # firm_attributes4 = {
+    #     'primary_investments': [['Seed', 4, 300]], ## round, invested capital, total capital allocated to this stage
+    #     'follow_on_reserve':0, ## total dollars reserved for fdund size
+    #     'fund_size': 300,
+    #     'pro_rata_at_or_below': 200,
+    #     'firm_lifespan_periods': 7,
+    #     'firm_lifespan_years': 11
+    # }
+
+
+    # helper_combine([run_montecarlo(firm_attributes1), run_montecarlo(firm_attributes2), run_montecarlo(firm_attributes3), run_montecarlo(firm_attributes4)])
+    # helper_combine([run_montecarlo(firm_attributes1), run_montecarlo(firm_attributes2), run_montecarlo(firm_attributes3)])
+
+    # helper_combine([run_montecarlo(firm_attributes1)])
+    
+    firm_attributes_mold = {
+        'primary_investments': None, ## round, invested capital, total capital allocated to this stage
+        'follow_on_reserve':0, ## total dollars reserved for fdund size
+        'fund_size': 200,
+        'pro_rata_at_or_below': 70,
+        'firm_lifespan_periods': 7,
+        'firm_lifespan_years': 11
+    }
+    outcomes = []
+    
+    for x in [i/4 for i in range(4,31)]:
+        print('status:', 200//x, (200//x)*x, x)
+        firm_attributes_mold['primary_investments'] = [['Seed', x, (200//x)*x]]
+        firm_attributes_mold['fund_size'] = (200//x)*x
+        outcomes.append(run_montecarlo(firm_attributes_mold))
+    helper_combine(outcomes)
+    
