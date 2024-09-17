@@ -1,6 +1,7 @@
 import random
 import math
 import numpy as np
+import time
 
 class Company:
     def __init__(self, name, stage, valuation, state, firm_invested_capital, firm_ownership, stages, valuations, dilution):
@@ -219,12 +220,14 @@ class Montecarlo:
                             self.firm_attributes['follow_on_reserve'], 
                             self.firm_attributes['fund_size'], 
                             self.firm_attributes['firm_lifespan_years'])
+            # print('initialize scenario', i, self.num_scenarios)
             new_firm.initialize_portfolio(self.stages, self.stage_valuations, self.stage_dilution)
             self.firm_scenarios.append(new_firm)
             ##print('Scenariosxxxx', self.firm_scenarios)
         
     def simulate(self):
         ## For each scenario
+        random.seed(time.time())
         for firm in self.firm_scenarios:
             ## Iteratively age companies in portfolio, deploying any secondary capital available
             for period in range(self.firm_attributes['firm_lifespan_periods']):
@@ -352,6 +355,21 @@ class Montecarlo:
             a.append(b)
         to_return['avg_ownership'] = [str(np.mean(a))]
 
+        ## Fund Specs
+
+        to_return['fund_size'] =  [str(self.firm_attributes['fund_size'])]
+        a = []
+        for x in self.firm_attributes['primary_investments']:
+            a.append('='.join(map(str,x)))
+        print('a', a)
+        to_return['primary_investments'] = ['-'.join(a)]
+        
+        to_return['reserve'] = [str(self.firm_attributes['follow_on_reserve'])]
+        to_return['series F exit'] = [str(self.stage_valuations['Series F'])]
+        to_return['pro_prata_at_or_below'] = [str(self.firm_attributes['pro_rata_at_or_below'])]
+
+
+
         return to_return
 
 
@@ -374,20 +392,20 @@ class Montecarlo:
             print(f"Scenario {i}: {scenario}")
             
 
-def run_montecarlo(firm_attributes):
+def run_montecarlo(firm_attributes, max_stage_valuation=None):
     num_scenarios = 10000
     stages = ['Pre-seed', 'Seed', 'Series A', 'Series B', 'Series C', 'Series D', 'Series E', 'Series F']
     
     #Probability distribution: next round, fail, m&a,
     stage_probs = {
-        'Pre-seed': [.61, .24, .16],
-        'Seed': [.50, .30, .20],
-        'Series A':    [.61, .3, .16],
-        'Series B':    [.52, .32, .17],
-        'Series C':    [.38, .50, .11],
-        'Series D':    [.33, .56, .11],
-        'Series E':    [.22, .57, .21],
-        'Series F':    [.10, .80, .10] #note this case is not triggered unless there is a Series G
+        'Pre-seed': [.35, .5, .1],
+        'Seed': [.35, .45, .2], # 'Seed': [.50, .35, .15], ## 
+        'Series A':    [.6, .25, .15],
+        'Series B':    [.5, .25, .25],
+        'Series C':    [.4, .35, .25],
+        'Series D':    [.4, .25, .35],
+        'Series E':    [.4, .25, .35],
+        'Series F':    [.2, .2, .6] 
     }
 
     stage_dilution = {
@@ -396,12 +414,12 @@ def run_montecarlo(firm_attributes):
         'Series B': 0.2,
         'Series C': 0.15,
         'Series D': 0.1,
-        'Series E': 0.1,
-        'Series F': 0.1
+        'Series E': 0.08,
+        'Series F': 0.08
     }
 
     stage_valuations = {
-        'Pre-seed': 20,
+        'Pre-seed': 15,
         'Seed': 30,
         'Series A': 70,
         'Series B': 200,
@@ -410,6 +428,10 @@ def run_montecarlo(firm_attributes):
         'Series E': 1500,
         'Series F': 10000
     }
+
+    if max_stage_valuation:
+        print('max_stage_valuation!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        stage_valuations['Series F'] = max_stage_valuation
 
     
     ## Perform checks that firm attributes are properly set
@@ -428,9 +450,11 @@ def run_montecarlo(firm_attributes):
 
     ## print('\nInitializing Montecarlo simulation with structure:', firm_attributes, '\n')
     montecarlo = Montecarlo(num_scenarios, stages, stage_probs, stage_valuations, stage_dilution, firm_attributes)
+    # print('hereere')
     montecarlo.initialize_scenarios()
+    # print('hereerere')
     montecarlo.simulate()
-    
+    # print('here4')
     ## print(sorted(montecarlo.get_IRR_return_outcomes()))
     ## print([f"{num*100:.1f}%" for num in sorted(montecarlo.get_IRR_return_outcomes())], '\n')
     ## print(list(map(lambda x : round(x), sorted(montecarlo.get_exact_return_outcomes()))), '\n')
@@ -450,20 +474,22 @@ def helper_combine(args):
                 master_arg[key] = arg[key]
     for key in master_arg.keys():
         print(':'.join([key] + master_arg[key]))
+    print('DONEDONEDONE')
+    return
 
 
 if __name__ == '__main__':
-    # firm_attributes1 = {
-    #     'primary_investments': [['Pre-seed', 1.5,18], ['Seed', 4, 180]], ## round, invested capital, total capital allocated to this stage
-    #     'follow_on_reserve':2, ## total dollars reserved for fdund size
-    #     'fund_size': 200,
-    #     'pro_rata_at_or_below': 30,
-    #     'firm_lifespan_periods': 7,
-    #     'firm_lifespan_years': 11
-    # }
+    firm_attributes1 = {
+        'primary_investments': [['Seed', 4,132], ['Pre-seed', 1.5, 18]], ## round, invested capital, total capital allocated to this stage
+        'follow_on_reserve':50, ## total dollars reserved for fdund size
+        'fund_size': 200,
+        'pro_rata_at_or_below': 70,
+        'firm_lifespan_periods': 7,
+        'firm_lifespan_years': 11
+    }
     # firm_attributes2 = {
-    #     'primary_investments': [['Seed', 4, 200]], ## round, invested capital, total capital allocated to this stage
-    #     'follow_on_reserve':0, ## total dollars reserved for fdund size
+    #     'primary_investments': [['Seed', 4, 176]], ## round, invested capital, total capital allocated to this stage
+    #     'follow_on_reserve':25, ## total dollars reserved for fdund size
     #     'fund_size': 200,
     #     'pro_rata_at_or_below': 30,
     #     'firm_lifespan_periods': 7,
@@ -471,7 +497,7 @@ if __name__ == '__main__':
     # }
     # firm_attributes3 = {
     #     'primary_investments': [['Pre-seed', 1.5, 12],['Seed', 4, 136], ['Series A', 10, 50]], ## round, invested capital, total capital allocated to this stage
-    #     'follow_on_reserve':2, ## total dollars reserved for fdund size
+    #     'follow_on_reserve':50, ## total dollars reserved for fdund size
     #     'fund_size': 200,
     #     'pro_rata_at_or_below': 30,
     #     'firm_lifespan_periods': 7,
@@ -490,22 +516,131 @@ if __name__ == '__main__':
     # helper_combine([run_montecarlo(firm_attributes1), run_montecarlo(firm_attributes2), run_montecarlo(firm_attributes3), run_montecarlo(firm_attributes4)])
     # helper_combine([run_montecarlo(firm_attributes1), run_montecarlo(firm_attributes2), run_montecarlo(firm_attributes3)])
 
-    # helper_combine([run_montecarlo(firm_attributes1)])
+    helper_combine([run_montecarlo(firm_attributes1)])
     
     firm_attributes_mold = {
         'primary_investments': None, ## round, invested capital, total capital allocated to this stage
         'follow_on_reserve':0, ## total dollars reserved for fdund size
         'fund_size': 200,
-        'pro_rata_at_or_below': 70,
+        'pro_rata_at_or_below': 30,
         'firm_lifespan_periods': 7,
-        'firm_lifespan_years': 11
+        'firm_lifespan_years': 11 
     }
+    
+
+    # stage_splits = [(1.0, 0), (.9, .1), (.8, .2), (.7, .3), (.6, .4), (.5, .5), (.4, .6), (.3, .7), (.2, .8), (.1, .9), (0, 1.0)]
+    # stage_investments = (1.5, 4)
+    
+    # outcomes = []
+    # for split in stage_splits:
+    #     fs = 200
+    #     reserve = 50
+    #     pro_rata_at_or_below = 70
+    #     print('Split:', 'Pre-seed', split[0], 'Seed', split[1])
+    #     pre_seed_capital = split[0]*(fs-reserve)
+    #     seed_capital = split[1]*(fs-reserve)
+    #     num_seed_invesments = seed_capital // stage_investments[1]
+    #     num_pre_seed_investments = pre_seed_capital // stage_investments[0]
+    #     extra = (fs-reserve)-num_pre_seed_investments*stage_investments[0]-num_seed_invesments*stage_investments[1]
+    #     reserve += extra
+
+    #     print('Pre-seed:', num_pre_seed_investments*stage_investments[0], 'Seed:', num_seed_invesments*stage_investments[1], 'Extra:', extra)
+
+    #     firm_attributes_mold['primary_investments'] = [['Seed', stage_investments[1], num_seed_invesments*stage_investments[1]], ['Pre-seed', stage_investments[0], num_pre_seed_investments*stage_investments[0]]]
+    #     firm_attributes_mold['follow_on_reserve'] = reserve
+    #     firm_attributes_mold['pro_rata_at_or_below'] = pro_rata_at_or_below
+    #     firm_attributes_mold['fund_size'] = fs
+    #     outcomes.append(run_montecarlo(firm_attributes_mold))
+    # helper_combine(outcomes)
+
+    
+    #----------------------------------------------------
+    #----------------------------------------------------
+    # outcomes = []
+    # fs = 200
+    # reserve = 50
+    # up_to_valuation = 70
+    # pre_seed_percent = .1
+    # seed_percent = .9
+    # pre_seed_investment = 1.5
+    # seed_investment = 4
+    # # print('here1')
+    # for x in [.25, .5, .75, 1, 1.25, 1.5, 1.75, 2, 2.25]:
+        
+    #     # print('status:', (fs)//x, ((fs)//x)*x, x)
+    #     # print('here2')
+    #     primary_avaliable = fs-reserve
+    #     pre_seed_capital = math.floor(pre_seed_percent*primary_avaliable)
+    #     seed_capital = math.floor(seed_percent*primary_avaliable)
+    #     psi = pre_seed_investment*x
+    #     si = seed_investment*x
+
+    #     firm_attributes_mold['primary_investments'] = [['Seed', si, seed_capital], ['Pre-seed', psi, pre_seed_capital]]
+    #     firm_attributes_mold['fund_size'] = fs
+    #     firm_attributes_mold['follow_on_reserve'] = fs - seed_capital-pre_seed_capital
+    #     outcomes.append(run_montecarlo(firm_attributes_mold))
+    
+    # helper_combine(outcomes)
+    #---------------------------------------------------
+    #---------------------------------------------------
+
+
+    # outcomes = []
+    # fs = 200
+    # reserve = 50
+    # up_to_valuation = 70
+    # for x in [i/4 for i in range(4,31)]:
+    #     print('status:', (fs-reserve)//x, ((fs-reserve)//x)*x, x)
+    #     to_be_deployed = ((fs-reserve)//x)*x
+    #     firm_attributes_mold['primary_investments'] = [['Seed', x, to_be_deployed]]
+    #     firm_attributes_mold['fund_size'] = fs
+    #     firm_attributes_mold['pro_rata_at_or_below'] = up_to_valuation
+    #     firm_attributes_mold['follow_on_reserve'] = fs - to_be_deployed
+    #     outcomes.append(run_montecarlo(firm_attributes_mold))
+    # helper_combine(outcomes)
+
+
+    # outcomes = []
+    # for x in [2500, 5000, 7500, 10000, 12500, 15000]:
+    #     fs = 200
+    #     reserve = 50
+    #     firm_attributes_mold['primary_investments'] = [['Seed', 4, 150]]
+    #     firm_attributes_mold['fund_size'] = 200
+    #     firm_attributes_mold['follow_on_reserve'] = 50
+    #     firm_attributes_mold['pro_rata_at_or_below'] = 70
+    #     outcomes.append(run_montecarlo(firm_attributes_mold, x))
+    # helper_combine(outcomes)
+
+
     outcomes = []
     
-    for x in [i/4 for i in range(4,31)]:
-        print('status:', 200//x, (200//x)*x, x)
-        firm_attributes_mold['primary_investments'] = [['Seed', x, (200//x)*x]]
-        firm_attributes_mold['fund_size'] = (200//x)*x
-        outcomes.append(run_montecarlo(firm_attributes_mold))
+    # for z in [.1, .2]:
+    for y in [30, 70, 200, 500]:
+        for x in [0,40, 50, 60]:
+            fs = 200
+            reserve = x
+            up_to_valuation = y
+            amount_invested = (1.5, 4)
+
+            seed_capital = ((1-.1)*(fs-reserve)//amount_invested[1])*amount_invested[1]
+            pre_seed_capital = (.1*(fs-reserve)//amount_invested[0])*amount_invested[0]
+            amount_deployed = seed_capital + pre_seed_capital
+            actual_reserve = fs - amount_deployed
+            print('ammount deployed', amount_deployed, 'actual reserve', actual_reserve)    
+
+
+            firm_attributes_mold['primary_investments'] = [['Seed', amount_invested[1],seed_capital ], ['Pre-seed', amount_invested[0], pre_seed_capital]]
+            firm_attributes_mold['fund_size'] = 200
+            firm_attributes_mold['follow_on_reserve'] = actual_reserve
+            firm_attributes_mold['pro_rata_at_or_below'] = up_to_valuation
+            print('pre_seed_capital:', pre_seed_capital, 'seed_capital:', seed_capital, 'actual_reserve:', actual_reserve)
+            outcomes.append(run_montecarlo(firm_attributes_mold))
     helper_combine(outcomes)
+
+
     
+
+
+
+# Todo
+# include returned capital from failed companies
