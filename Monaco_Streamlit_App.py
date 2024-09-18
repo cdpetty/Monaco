@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from Monaco_python_v6 import Montecarlo, build_firm_attributes_for_simulation, stages, stage_probs, stage_valuations, stage_dilution
+from montecarlo_simulation import Montecarlo, build_firm_attributes_for_simulation, stages, stage_probs, stage_valuations, stage_dilution
 
 st.title('Monaco: Monte Carlo Simulation for VC Returns')
 
