@@ -374,7 +374,6 @@ class Montecarlo:
         return outcomes
 
     
-    
     def performance_quartiles(self):
         
         outcomes = self.get_MoM_return_outcomes()
@@ -392,7 +391,7 @@ class Montecarlo:
     
 
     def montecarlo_histogram(self):
-        ''' Histogram for montecarlo simulation - very ugly code optimized for  being able to combine them'''
+        ''' Histogram for montecarlo simulation - very ugly code optimized for  being able to combine multiple hisograms across different simulations'''
         
         histogram = {}
         outcomes = self.get_MoM_return_outcomes()
@@ -404,7 +403,6 @@ class Montecarlo:
             histogram[f"{counter}-{counter+hist_size}"] = [str(len(relevant))]
             counter += hist_size
         
-
         return histogram
 
     
