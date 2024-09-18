@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD streamlit run --server.port 8080 --server.enableCORS false monaco/Monaco_Streamlit_App.pys
+CMD streamlit run --server.port 8080 --server.enableCORS false monaco/streamlit_app_side_by_side.py
